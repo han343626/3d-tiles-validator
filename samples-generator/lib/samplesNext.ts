@@ -1,15 +1,24 @@
 import { GeneratorArgs } from './arguments';
 import {
+    east, gltfConversionOptions,
     latitude,
-    longitude,
-    outputDirectory,
-    tilesNextTilesetJsonVersion,
+    longitude, north,
+    outputDirectory, south,
+    tilesNextTilesetJsonVersion, tileWidth, west,
     wgs84Transform
 } from './constants';
 import * as path from 'path';
 import { TilesNextExtension } from './tilesNextExtension';
 import { Gltf } from './gltfType';
 import { writeTile } from './ioUtil';
+import { TilesetJson} from './tilesetJson';
+import { InstanceTileUtils } from './instanceUtilsNext';
+import { addBinaryBuffers } from './gltfUtil';
+import { createEXTMeshInstancingExtension } from './createEXTMeshInstancing';
+import { getGltfFromGlbUri } from './gltfFromUri';
+import { FeatureMetadata } from './featureMetadata';
+import { BatchTable } from './createBuildingsTile';
+const getProperties = require('./getProperties');
 
 const Cesium = require('cesium');
 const fsExtra = require('fs-extra');
@@ -132,7 +141,158 @@ export namespace SamplesNext {
         }
     }
 
-    export async function createTreeBillboards(args: GeneratorArgs) {}
+    interface TreeBillboardData {
+        gltf: Gltf;
+        tileWidth: number;
+        instancesLength: number;
+        embed: boolean;
+        modelSize: number;
+        createBatchTable: boolean;
+        eastNorthUp: boolean;
+        transform: object;
+        batchTable?: BatchTable
+    }
+
+    export async function createTreeBillboards(args: GeneratorArgs) {
+        const ext = args.useGlb
+            ? TilesNextExtension.Glb
+            : TilesNextExtension.Gltf;
+
+        // tree
+        const treeGlb = 'data/tree.glb';
+        const treeTileName = 'tree' + ext;
+
+        // tree_billboard
+        const treeBillboardGlb = 'data/tree_billboard.glb';
+        const treeBillboardTileName = 'tree_billboard' + ext;
+
+        // Billboard effect is coded in the tree_billboard vertex shader
+        const tilesetName = 'TilesetWithTreeBillboards';
+        const tilesetDirectory =
+                path.join(outputDirectory, 'Samples', tilesetName);
+        const tilesetPath = path.join(tilesetDirectory, 'tileset.json');
+        const treeBillboardGeometricError = 100.0;
+        const treeGeometricError = 10.0;
+        const treesCount = 25;
+        const treesHeight = 20.0;
+        const treesTileWidth = tileWidth;
+        const treesRegion = [west, south, east, north, 0.0, treesHeight];
+
+        const tree: TreeBillboardData = {
+            gltf: await getGltfFromGlbUri(treeGlb, gltfConversionOptions),
+            tileWidth : treesTileWidth,
+            instancesLength : treesCount,
+            embed : true,
+            modelSize : treesHeight,
+            createBatchTable : true,
+            eastNorthUp : true,
+            transform:  wgs84Transform(longitude, latitude, 0.0)
+        };
+
+        // Billboard model is centered about the origin
+        const billboard: TreeBillboardData = {
+            gltf: await getGltfFromGlbUri(treeBillboardGlb, gltfConversionOptions),
+            tileWidth : treesTileWidth,
+            instancesLength : treesCount,
+            embed : true,
+            modelSize : treesHeight,
+            createBatchTable : true,
+            eastNorthUp : true,
+            transform: wgs84Transform( longitude, latitude, treesHeight / 2.0 )
+        };
+
+        const addInstancingExtAndFeatureTable = (data: TreeBillboardData): BatchTable => {
+            const positions = InstanceTileUtils.getPositions(
+                data.instancesLength,
+                data.tileWidth,
+                data.modelSize,
+                data.transform
+            );
+
+            const accessor = data.gltf.accessors.length;
+            addBinaryBuffers(data.gltf, positions);
+            createEXTMeshInstancingExtension(data.gltf, data.gltf.nodes[0],
+                {
+                    attributes: {
+                        TRANSLATION: accessor
+                    }
+                });
+
+            const heightData = new Array(data.instancesLength)
+                .fill(data.modelSize);
+
+            FeatureMetadata.updateExtensionUsed(data.gltf);
+
+            const primitive = data.gltf.meshes[0].primitives[0];
+
+            FeatureMetadata.addFeatureLayer(primitive, {
+                featureTable: 0,
+                instanceStride: 1,
+                vertexAttribute: {
+                    implicit: {
+                        increment: 1,
+                        start: 0
+                    }
+                }
+            });
+
+            FeatureMetadata.addFeatureTable(data.gltf, {
+                featureCount: data.instancesLength,
+                properties: {
+                    Height: { values: heightData }
+                }
+            });
+
+            return {
+                Height: heightData
+            }
+        };
+
+        const treeBatchTable = addInstancingExtAndFeatureTable(tree);
+        const billboardBatchTable = addInstancingExtAndFeatureTable(billboard);
+
+        // This is unnecessary right now, as the treeBatchTable and
+        // billboardBatchTable share the same instance height, but if we
+        // ever want to change one of their heights, we'll need `getProperties`
+        // to iterate through both arrays to find the true minimum / maximum.
+
+        const concatenatedBatchTable = {
+            Height: [...treeBatchTable.Height, ...billboardBatchTable.Height]
+        };
+
+        const tilesetJson: TilesetJson = {
+            asset : {
+                version : tilesNextTilesetJsonVersion
+            },
+            geometricError : treeBillboardGeometricError,
+            root : {
+                boundingVolume : {
+                    region : treesRegion
+                },
+                geometricError : treeGeometricError,
+                refine : 'REPLACE',
+                content : {
+                    uri : 'tree_billboard' + ext
+                },
+                children : [
+                    {
+                        boundingVolume : {
+                            region : treesRegion
+                        },
+                        geometricError : 0.0,
+                        content : {
+                            uri : 'tree' + ext
+                        }
+                    }
+                ]
+            }
+        };
+        tilesetJson.properties = getProperties(concatenatedBatchTable);
+
+        await saveJson(tilesetPath, tilesetJson, args.prettyJson, args.gzip);
+        await writeTile(tilesetDirectory, treeTileName, tree.gltf, args);
+        await writeTile(tilesetDirectory, treeBillboardTileName, billboard.gltf, args);
+    }
 
     export async function createRequestVolume(args: GeneratorArgs) {}
 
