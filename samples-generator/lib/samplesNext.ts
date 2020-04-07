@@ -1,28 +1,33 @@
 import { GeneratorArgs } from './arguments';
 import {
-    east, gltfConversionOptions,
+    east,
+    gltfConversionOptions,
     latitude,
-    longitude, north,
-    outputDirectory, south,
-    tilesNextTilesetJsonVersion, tileWidth, west,
+    longitude,
+    north,
+    outputDirectory,
+    south,
+    tilesNextTilesetJsonVersion,
+    tileWidth,
+    west,
     wgs84Transform
 } from './constants';
 import * as path from 'path';
 import { TilesNextExtension } from './tilesNextExtension';
 import { Gltf } from './gltfType';
 import { writeTile } from './ioUtil';
-import { TilesetJson} from './tilesetJson';
+import { TilesetJson } from './tilesetJson';
 import { InstanceTileUtils } from './instanceUtilsNext';
 import { addBinaryBuffers } from './gltfUtil';
 import { createEXTMeshInstancingExtension } from './createEXTMeshInstancing';
 import { getGltfFromGlbUri } from './gltfFromUri';
 import { FeatureMetadata } from './featureMetadata';
 import { BatchTable } from './createBuildingsTile';
+import { Matrix4 } from 'cesium';
+
 const getProperties = require('./getProperties');
 
-const Cesium = require('cesium');
 const fsExtra = require('fs-extra');
-const Matrix4 = Cesium.Matrix4;
 const gltfPipeline = require('gltf-pipeline');
 const glbToGltf = gltfPipeline.glbToGltf;
 const saveJson  = require('./saveJson');
@@ -149,7 +154,7 @@ export namespace SamplesNext {
         modelSize: number;
         createBatchTable: boolean;
         eastNorthUp: boolean;
-        transform: object;
+        transform: Matrix4;
         batchTable?: BatchTable
     }
 

@@ -1,26 +1,23 @@
-const Cesium = require('cesium');
-const Matrix4 = Cesium.Matrix4;
-const defined = Cesium.defined;
-const Cartesian3 = Cesium.Cartesian3;
-
 import { createBuildings } from './createBuilding';
-import { generateBuildingBatchTable, BatchTable } from './createBuildingsTile';
+import { BatchTable, generateBuildingBatchTable } from './createBuildingsTile';
 import { Mesh } from './Mesh';
 import { FeatureTableUtils } from './featureMetatableUtilsNext';
 import { Gltf } from './gltfType';
 import { FeatureMetadata } from './featureMetadata';
-import createGltf = require('./createGltf');
-import { 
-    TileOptions, 
-    tilesNextTilesetJsonVersion, 
-    largeGeometricError, 
-    tileWidth, 
-    longitudeExtent, 
-    longitude, 
-    latitude, 
-    latitudeExtent, buildingsTransform } from './constants';
+import {
+    buildingsTransform,
+    largeGeometricError,
+    latitude,
+    latitudeExtent,
+    longitude,
+    longitudeExtent,
+    TileOptions,
+    tilesNextTilesetJsonVersion,
+    tileWidth
+} from './constants';
 import { TilesNextExtension } from './tilesNextExtension';
-import { TilesetJson, TilesetOption } from './tilesetJson';
+import createGltf = require('./createGltf');
+import { Cartesian3, defined, Matrix4 } from 'cesium';
 
 export namespace TilesetUtilsNext {
     export function createBuildingGltfsWithFeatureMetadata(
