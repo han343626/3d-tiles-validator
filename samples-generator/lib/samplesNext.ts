@@ -1,14 +1,15 @@
 import { GeneratorArgs } from './arguments';
 import {
+    childrenRegion,
     east,
-    gltfConversionOptions,
-    latitude,
-    longitude,
+    gltfConversionOptions, gzip,
+    latitude, llRegion, llTileOptions,
+    longitude, lrRegion, lrTileOptions,
     north,
-    outputDirectory,
+    outputDirectory, prettyJson, smallGeometricError,
     south,
     tilesNextTilesetJsonVersion,
-    tileWidth,
+    tileWidth, ulRegion, ulTileOptions, urRegion, urTileOptions,
     west,
     wgs84Transform
 } from './constants';
@@ -22,8 +23,11 @@ import { addBinaryBuffers } from './gltfUtil';
 import { createEXTMeshInstancingExtension } from './createEXTMeshInstancing';
 import { getGltfFromGlbUri } from './gltfFromUri';
 import { FeatureMetadata } from './featureMetadata';
-import { BatchTable } from './createBuildingsTile';
-import { Matrix4 } from 'cesium';
+import { BatchTable, createBuildingsTile } from './createBuildingsTile';
+import { clone, Matrix4 } from 'cesium';
+import { createPointCloudTile } from './createPointCloudTile';
+import { Promise as Bluebird } from 'bluebird';
+import { TilesetUtilsNext } from './tilesetUtilsNext';
 
 const getProperties = require('./getProperties');
 
@@ -33,6 +37,7 @@ const glbToGltf = gltfPipeline.glbToGltf;
 const saveJson  = require('./saveJson');
 
 export namespace SamplesNext {
+
     export async function createDiscreteLOD(args: GeneratorArgs) {
         const ext = args.useGlb
             ? TilesNextExtension.Glb
@@ -146,18 +151,6 @@ export namespace SamplesNext {
         }
     }
 
-    interface TreeBillboardData {
-        gltf: Gltf;
-        tileWidth: number;
-        instancesLength: number;
-        embed: boolean;
-        modelSize: number;
-        createBatchTable: boolean;
-        eastNorthUp: boolean;
-        transform: Matrix4;
-        batchTable?: BatchTable
-    }
-
     export async function createTreeBillboards(args: GeneratorArgs) {
         const ext = args.useGlb
             ? TilesNextExtension.Glb
@@ -182,6 +175,18 @@ export namespace SamplesNext {
         const treesHeight = 20.0;
         const treesTileWidth = tileWidth;
         const treesRegion = [west, south, east, north, 0.0, treesHeight];
+
+        interface TreeBillboardData {
+            gltf: Gltf;
+            tileWidth: number;
+            instancesLength: number;
+            embed: boolean;
+            modelSize: number;
+            createBatchTable: boolean;
+            eastNorthUp: boolean;
+            transform: Matrix4;
+            batchTable?: BatchTable
+        }
 
         const tree: TreeBillboardData = {
             gltf: await getGltfFromGlbUri(treeGlb, gltfConversionOptions),
@@ -299,7 +304,210 @@ export namespace SamplesNext {
         await writeTile(tilesetDirectory, treeBillboardTileName, billboard.gltf, args);
     }
 
-    export async function createRequestVolume(args: GeneratorArgs) {}
+    export async function createRequestVolume(args: GeneratorArgs) {
+        const ext = args.useGlb
+            ? TilesNextExtension.Glb
+            : TilesNextExtension.Gltf;
+
+        const tilesetName = 'TilesetWithRequestVolume';
+        const tilesetDirectory = path.join(outputDirectory, 'Samples', tilesetName);
+        const tilesetPath = path.join(tilesetDirectory, 'tileset.json');
+        const buildingGlbPath = 'data/building.glb';
+        const buildingTileName = 'building' + ext;
+        const buildingTilePath = path.join(tilesetDirectory, buildingTileName);
+        const pointCloudTileName = 'points' + ext;
+        const pointCloudTilePath = path.join(tilesetDirectory, pointCloudTileName);
+
+        const cityTilesetPath = path.join(tilesetDirectory, 'city', 'tileset.json');
+        const cityTileNames = ['ll' + ext, 'lr' + ext, 'ur' + ext, 'ul' + ext];
+        const cityTileOptions = [
+            llTileOptions,
+            lrTileOptions,
+            urTileOptions,
+            ulTileOptions
+        ];
+
+        const buildingWidth = 3.738;
+        const buildingDepth = 3.72;
+        const buildingHeight = 13.402;
+        const buildingGeometricError = 100.0; // Estimate based on diagonal
+        const buildingScale = 5.0;
+        const wgs84Matrix = wgs84Transform(longitude, latitude, 0.0);
+        const scaleMatrix = Matrix4.fromUniformScale(buildingScale);
+        const buildingMatrix = Matrix4.multiply(
+            wgs84Matrix,
+            scaleMatrix,
+            new Matrix4()
+        );
+        const buildingTransform = Matrix4.pack(buildingMatrix, new Array(16));
+        const buildingBoxLocal = [
+            0.0,
+            0.0,
+            buildingHeight / 2.0, // center
+            buildingWidth / 2.0,
+            0.0,
+            0.0, // width
+            0.0,
+            buildingDepth / 2.0,
+            0.0, // depth
+            0.0,
+            0.0,
+            buildingHeight / 2.0 // height
+        ];
+
+        const pointsLength = 125000;
+        const pointCloudTileWidth = 2.5;
+        const pointCloudRadius = pointCloudTileWidth / 2.0;
+        const pointCloudSphereLocal = [0.0, 0.0, 0.0, pointCloudRadius];
+        // Try to place it in one of the building's floors
+        const pointCloudHeight = pointCloudRadius + 0.2;
+        const pointCloudMatrix = wgs84Transform(
+            longitude,
+            latitude,
+            pointCloudHeight
+        );
+        const pointCloudTransform = Matrix4.pack(pointCloudMatrix, new Array(16));
+        const pointCloudViewerRequestSphere = [
+            0.0,
+            0.0,
+            0.0,
+            pointCloudTileWidth * 6.0
+        ]; // Point cloud only become visible when you are inside the request volume
+
+        const pointCloudOptions = {
+            tileWidth: pointCloudTileWidth,
+            pointsLength: pointsLength,
+            transform: Matrix4.IDENTITY,
+            relativeToCenter: false,
+            shape: 'sphere',
+            use3dTilesNext: true
+        };
+
+        const totalRegion = clone(childrenRegion);
+        totalRegion[5] = buildingHeight * buildingScale;
+
+        const tilesetJson: TilesetJson = {
+            asset: {
+                version: tilesNextTilesetJsonVersion
+            },
+            geometricError: buildingGeometricError,
+            root: {
+                boundingVolume: {
+                    region: totalRegion
+                },
+                geometricError: buildingGeometricError,
+                refine: 'ADD',
+                children: [
+                    {
+                        boundingVolume: {
+                            region: childrenRegion
+                        },
+                        geometricError: smallGeometricError,
+                        content: {
+                            uri: 'city/tileset.json'
+                        }
+                    },
+                    {
+                        transform: buildingTransform,
+                        boundingVolume: {
+                            box: buildingBoxLocal
+                        },
+                        geometricError: 0.0,
+                        content: {
+                            uri: buildingTileName
+                        }
+                    },
+                    {
+                        transform: pointCloudTransform,
+                        viewerRequestVolume: {
+                            sphere: pointCloudViewerRequestSphere
+                        },
+                        boundingVolume: {
+                            sphere: pointCloudSphereLocal
+                        },
+                        geometricError: 0.0,
+                        content: {
+                            uri: pointCloudTileName
+                        }
+                    }
+                ]
+            }
+        };
+
+        const cityTilesetJson: TilesetJson = {
+            asset: {
+                version: tilesNextTilesetJsonVersion
+            },
+            properties: undefined,
+            geometricError: smallGeometricError,
+            root: {
+                boundingVolume: {
+                    region: childrenRegion
+                },
+                geometricError: smallGeometricError,
+                refine: 'ADD',
+                children: [
+                    {
+                        boundingVolume: {
+                            region: llRegion
+                        },
+                        geometricError: 0.0,
+                        content: {
+                            uri: 'll' + ext
+                        }
+                    },
+                    {
+                        boundingVolume: {
+                            region: lrRegion
+                        },
+                        geometricError: 0.0,
+                        content: {
+                            uri: 'lr' + ext
+                        }
+                    },
+                    {
+                        boundingVolume: {
+                            region: urRegion
+                        },
+                        geometricError: 0.0,
+                        content: {
+                            uri: 'ur' + ext
+                        }
+                    },
+                    {
+                        boundingVolume: {
+                            region: ulRegion
+                        },
+                        geometricError: 0.0,
+                        content: {
+                            uri: 'ul' + ext
+                        }
+                    }
+                ]
+            }
+        };
+
+        const pntsGltf = createPointCloudTile(pointCloudOptions).gltf;
+
+        const result = TilesetUtilsNext.createBuildingGltfsWithFeatureMetadata(
+            cityTileOptions
+        );
+
+        // write the city tiles
+        const gltfs = result.gltfs;
+        for (let i = 0; i < gltfs.length; ++i) {
+            const gltf = gltfs[i];
+            const tileFilename = cityTileNames[i];
+            await writeTile(tilesetDirectory, tileFilename, gltf, args);
+        }
+
+        // tileset.jsons
+        saveJson(tilesetPath, tilesetJson, prettyJson, gzip),
+        saveJson(cityTilesetPath, cityTilesetJson, prettyJson, gzip),
+
+        // write the point cloud tile out
+        await writeTile(tilesetDirectory, pointCloudTileName, pntsGltf, args);
+    }
 
     export async function createExpireTileset(args: GeneratorArgs) {}
 }

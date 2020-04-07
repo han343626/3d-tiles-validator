@@ -2,6 +2,12 @@ import { AtLeastOne } from './atLeastN';
 import { instancesRegion } from './constants';
 import { TilesetOption } from './createTilesetJsonSingle';
 
+type BoundingVolume = AtLeastOne<{
+    region: number[];
+    box: number[];
+    sphere: number[];
+}>;
+
 export interface TilesetJson {
     asset: {
         version: string;
@@ -15,23 +21,23 @@ export interface TilesetJson {
     };
     geometricError: number;
     root: {
-        content: {
+        content?: {
             uri: string;
             boundingVolume?: {
                 region: number[];
             };
         };
         children?: {
-            boundingVolume: {
-                region: number[];
-            };
+            boundingVolume: BoundingVolume;
             geometricError: number;
+            transform?: number[];
             content: {
                 uri: string;
             };
             extras?: {
                 id: string;
             };
+            viewerRequestVolume?: BoundingVolume;
         }[];
         geometricError: number;
         versionNumber?: string;
@@ -42,11 +48,7 @@ export interface TilesetJson {
         eastNorthUp?: boolean;
         expire?: any;
         refine: string;
-        boundingVolume: AtLeastOne<{
-            region: number[];
-            box: number[];
-            sphere: number[];
-        }>;
+        boundingVolume: BoundingVolume;
     };
     extensionsUsed?: string[];
     extensionsRequired?: string[];
