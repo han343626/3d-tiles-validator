@@ -2,14 +2,25 @@ import { GeneratorArgs } from './arguments';
 import {
     childrenRegion,
     east,
-    gltfConversionOptions, gzip,
-    latitude, llRegion, llTileOptions,
-    longitude, lrRegion, lrTileOptions,
+    gltfConversionOptions,
+    gzip,
+    latitude,
+    llRegion,
+    llTileOptions,
+    longitude,
+    lrRegion,
+    lrTileOptions,
     north,
-    outputDirectory, prettyJson, smallGeometricError,
+    outputDirectory,
+    prettyJson,
+    smallGeometricError,
     south,
     tilesNextTilesetJsonVersion,
-    tileWidth, ulRegion, ulTileOptions, urRegion, urTileOptions,
+    tileWidth,
+    ulRegion,
+    ulTileOptions,
+    urRegion,
+    urTileOptions,
     west,
     wgs84Transform
 } from './constants';
@@ -23,21 +34,18 @@ import { addBinaryBuffers } from './gltfUtil';
 import { createEXTMeshInstancingExtension } from './createEXTMeshInstancing';
 import { getGltfFromGlbUri } from './gltfFromUri';
 import { FeatureMetadata } from './featureMetadata';
-import { BatchTable, createBuildingsTile } from './createBuildingsTile';
+import { BatchTable} from './createBuildingsTile';
 import { clone, Matrix4 } from 'cesium';
 import { createPointCloudTile } from './createPointCloudTile';
-import { Promise as Bluebird } from 'bluebird';
 import { TilesetUtilsNext } from './tilesetUtilsNext';
 
 const getProperties = require('./getProperties');
-
 const fsExtra = require('fs-extra');
 const gltfPipeline = require('gltf-pipeline');
 const glbToGltf = gltfPipeline.glbToGltf;
-const saveJson  = require('./saveJson');
+const saveJson = require('./saveJson');
 
 export namespace SamplesNext {
-
     export async function createDiscreteLOD(args: GeneratorArgs) {
         const ext = args.useGlb
             ? TilesNextExtension.Glb
@@ -94,7 +102,7 @@ export namespace SamplesNext {
         const dragonTilesetGeometricError =
             dragonLowGeometricError * dragonScale;
 
-        const tilesetJson = {
+        const tilesetJson: TilesetJson = {
             asset: {
                 version: tilesNextTilesetJsonVersion
             },
@@ -135,7 +143,7 @@ export namespace SamplesNext {
         };
 
         const gltfs: Gltf[] = [];
-        for (let i=0; i < glbPaths.length; ++i) {
+        for (let i = 0; i < glbPaths.length; ++i) {
             const glbPath = glbPaths[i];
             const glb = await fsExtra.readFile(glbPath);
             const gltf = (await glbToGltf(glb)).gltf as Gltf;
@@ -144,7 +152,7 @@ export namespace SamplesNext {
 
         await saveJson(tilesetPath, tilesetJson, args.prettyJson, args.gzip);
 
-        for (let i=0; i < tileNames.length; ++i) {
+        for (let i = 0; i < tileNames.length; ++i) {
             const name = tileNames[i] + ext;
             const gltf = gltfs[i];
             await writeTile(tilesetDirectory, name, gltf, args);
@@ -166,8 +174,11 @@ export namespace SamplesNext {
 
         // Billboard effect is coded in the tree_billboard vertex shader
         const tilesetName = 'TilesetWithTreeBillboards';
-        const tilesetDirectory =
-                path.join(outputDirectory, 'Samples', tilesetName);
+        const tilesetDirectory = path.join(
+            outputDirectory,
+            'Samples',
+            tilesetName
+        );
         const tilesetPath = path.join(tilesetDirectory, 'tileset.json');
         const treeBillboardGeometricError = 100.0;
         const treeGeometricError = 10.0;
@@ -185,33 +196,38 @@ export namespace SamplesNext {
             createBatchTable: boolean;
             eastNorthUp: boolean;
             transform: Matrix4;
-            batchTable?: BatchTable
+            batchTable?: BatchTable;
         }
 
         const tree: TreeBillboardData = {
             gltf: await getGltfFromGlbUri(treeGlb, gltfConversionOptions),
-            tileWidth : treesTileWidth,
-            instancesLength : treesCount,
-            embed : true,
-            modelSize : treesHeight,
-            createBatchTable : true,
-            eastNorthUp : true,
-            transform:  wgs84Transform(longitude, latitude, 0.0)
+            tileWidth: treesTileWidth,
+            instancesLength: treesCount,
+            embed: true,
+            modelSize: treesHeight,
+            createBatchTable: true,
+            eastNorthUp: true,
+            transform: wgs84Transform(longitude, latitude, 0.0)
         };
 
         // Billboard model is centered about the origin
         const billboard: TreeBillboardData = {
-            gltf: await getGltfFromGlbUri(treeBillboardGlb, gltfConversionOptions),
-            tileWidth : treesTileWidth,
-            instancesLength : treesCount,
-            embed : true,
-            modelSize : treesHeight,
-            createBatchTable : true,
-            eastNorthUp : true,
-            transform: wgs84Transform( longitude, latitude, treesHeight / 2.0 )
+            gltf: await getGltfFromGlbUri(
+                treeBillboardGlb,
+                gltfConversionOptions
+            ),
+            tileWidth: treesTileWidth,
+            instancesLength: treesCount,
+            embed: true,
+            modelSize: treesHeight,
+            createBatchTable: true,
+            eastNorthUp: true,
+            transform: wgs84Transform(longitude, latitude, treesHeight / 2.0)
         };
 
-        const addInstancingExtAndFeatureTable = (data: TreeBillboardData): BatchTable => {
+        const addInstancingExtAndFeatureTable = (
+            data: TreeBillboardData
+        ): BatchTable => {
             const positions = InstanceTileUtils.getPositions(
                 data.instancesLength,
                 data.tileWidth,
@@ -221,15 +237,15 @@ export namespace SamplesNext {
 
             const accessor = data.gltf.accessors.length;
             addBinaryBuffers(data.gltf, positions);
-            createEXTMeshInstancingExtension(data.gltf, data.gltf.nodes[0],
-                {
-                    attributes: {
-                        TRANSLATION: accessor
-                    }
-                });
+            createEXTMeshInstancingExtension(data.gltf, data.gltf.nodes[0], {
+                attributes: {
+                    TRANSLATION: accessor
+                }
+            });
 
-            const heightData = new Array(data.instancesLength)
-                .fill(data.modelSize);
+            const heightData = new Array(data.instancesLength).fill(
+                data.modelSize
+            );
 
             FeatureMetadata.updateExtensionUsed(data.gltf);
 
@@ -255,7 +271,7 @@ export namespace SamplesNext {
 
             return {
                 Height: heightData
-            }
+            };
         };
 
         const treeBatchTable = addInstancingExtAndFeatureTable(tree);
@@ -271,27 +287,27 @@ export namespace SamplesNext {
         };
 
         const tilesetJson: TilesetJson = {
-            asset : {
-                version : tilesNextTilesetJsonVersion
+            asset: {
+                version: tilesNextTilesetJsonVersion
             },
-            geometricError : treeBillboardGeometricError,
-            root : {
-                boundingVolume : {
-                    region : treesRegion
+            geometricError: treeBillboardGeometricError,
+            root: {
+                boundingVolume: {
+                    region: treesRegion
                 },
-                geometricError : treeGeometricError,
-                refine : 'REPLACE',
-                content : {
-                    uri : 'tree_billboard' + ext
+                geometricError: treeGeometricError,
+                refine: 'REPLACE',
+                content: {
+                    uri: 'tree_billboard' + ext
                 },
-                children : [
+                children: [
                     {
-                        boundingVolume : {
-                            region : treesRegion
+                        boundingVolume: {
+                            region: treesRegion
                         },
-                        geometricError : 0.0,
-                        content : {
-                            uri : 'tree' + ext
+                        geometricError: 0.0,
+                        content: {
+                            uri: 'tree' + ext
                         }
                     }
                 ]
@@ -301,7 +317,12 @@ export namespace SamplesNext {
 
         await saveJson(tilesetPath, tilesetJson, args.prettyJson, args.gzip);
         await writeTile(tilesetDirectory, treeTileName, tree.gltf, args);
-        await writeTile(tilesetDirectory, treeBillboardTileName, billboard.gltf, args);
+        await writeTile(
+            tilesetDirectory,
+            treeBillboardTileName,
+            billboard.gltf,
+            args
+        );
     }
 
     export async function createRequestVolume(args: GeneratorArgs) {
@@ -310,15 +331,22 @@ export namespace SamplesNext {
             : TilesNextExtension.Gltf;
 
         const tilesetName = 'TilesetWithRequestVolume';
-        const tilesetDirectory = path.join(outputDirectory, 'Samples', tilesetName);
+        const tilesetDirectory = path.join(
+            outputDirectory,
+            'Samples',
+            tilesetName
+        );
         const tilesetPath = path.join(tilesetDirectory, 'tileset.json');
         const buildingGlbPath = 'data/building.glb';
         const buildingTileName = 'building' + ext;
         const buildingTilePath = path.join(tilesetDirectory, buildingTileName);
         const pointCloudTileName = 'points' + ext;
-        const pointCloudTilePath = path.join(tilesetDirectory, pointCloudTileName);
 
-        const cityTilesetPath = path.join(tilesetDirectory, 'city', 'tileset.json');
+        const cityTilesetPath = path.join(
+            tilesetDirectory,
+            'city',
+            'tileset.json'
+        );
         const cityTileNames = ['ll' + ext, 'lr' + ext, 'ur' + ext, 'ul' + ext];
         const cityTileOptions = [
             llTileOptions,
@@ -366,7 +394,10 @@ export namespace SamplesNext {
             latitude,
             pointCloudHeight
         );
-        const pointCloudTransform = Matrix4.pack(pointCloudMatrix, new Array(16));
+        const pointCloudTransform = Matrix4.pack(
+            pointCloudMatrix,
+            new Array(16)
+        );
         const pointCloudViewerRequestSphere = [
             0.0,
             0.0,
@@ -493,7 +524,6 @@ export namespace SamplesNext {
             cityTileOptions
         );
 
-        // write the city tiles
         const gltfs = result.gltfs;
         for (let i = 0; i < gltfs.length; ++i) {
             const gltf = gltfs[i];
@@ -501,13 +531,108 @@ export namespace SamplesNext {
             await writeTile(tilesetDirectory, tileFilename, gltf, args);
         }
 
-        // tileset.jsons
-        saveJson(tilesetPath, tilesetJson, prettyJson, gzip),
-        saveJson(cityTilesetPath, cityTilesetJson, prettyJson, gzip),
+        const buildingGltf =
+            await getGltfFromGlbUri(buildingGlbPath, gltfConversionOptions);
 
-        // write the point cloud tile out
-        await writeTile(tilesetDirectory, pointCloudTileName, pntsGltf, args);
+        await writeTile(buildingTilePath, '', buildingGltf, args);
+        await saveJson(tilesetPath, tilesetJson, prettyJson, gzip);
+        await saveJson(cityTilesetPath, cityTilesetJson, prettyJson, gzip);
+
+        await writeTile(
+            tilesetDirectory,
+            pointCloudTileName,
+            pntsGltf,
+            args
+        );
     }
 
-    export async function createExpireTileset(args: GeneratorArgs) {}
+    export async function createExpireTileset(args: GeneratorArgs) {
+        const ext = args.useGlb
+            ? TilesNextExtension.Glb
+            : TilesNextExtension.Gltf;
+
+        const tilesetName = 'TilesetWithExpiration';
+        const tilesetDirectory = path.join(
+            outputDirectory,
+            'Samples',
+            tilesetName
+        );
+        const tilesetPath = path.join(tilesetDirectory, 'tileset.json');
+        const pointCloudTileName = 'point' + ext;
+        const pointCloudTilePath = path.join(
+            tilesetDirectory,
+            pointCloudTileName
+        );
+
+        const pointsLength = 8000;
+        const pointCloudTileWidth = 200.0;
+        const pointCloudSphereLocal = [
+            0.0,
+            0.0,
+            0.0,
+            pointCloudTileWidth / 2.0
+        ];
+
+        // Diagonal of the point cloud box
+        const pointCloudGeometricError = 1.732 * pointCloudTileWidth;
+        const pointCloudMatrix = wgs84Transform(
+            longitude,
+            latitude,
+            pointCloudTileWidth / 2.0
+        );
+        const pointCloudTransform = Matrix4.pack(
+            pointCloudMatrix,
+            new Array(16)
+        );
+
+        const pointCloudOptions = {
+            tileWidth: pointCloudTileWidth,
+            pointsLength: pointsLength,
+            perPointProperties: true,
+            transform: Matrix4.IDENTITY,
+            relativeToCenter: false,
+            color: 'noise',
+            shape: 'box',
+            use3dTilesNext: true
+        };
+
+        const gltfPnts = createPointCloudTile(pointCloudOptions).gltf;
+        await writeTile(pointCloudTilePath, '', gltfPnts, args);
+
+        // Save a few tiles for the server cache
+        for (let i = 0; i < 5; ++i) {
+            const tilePath = path.join(
+                tilesetDirectory,
+                'cache',
+                'points_' + i + ext
+            );
+            const tileOptions = clone(pointCloudOptions);
+            tileOptions.time = i * 0.1;
+            const tile = createPointCloudTile(tileOptions).gltf;
+            await writeTile(tilePath, '', tile, args);
+        }
+
+        const tilesetJson: TilesetJson = {
+            asset: {
+                version: tilesNextTilesetJsonVersion
+            },
+            geometricError: pointCloudGeometricError,
+            root: {
+                expire: {
+                    duration: 5.0
+                },
+                transform: pointCloudTransform,
+                boundingVolume: {
+                    sphere: pointCloudSphereLocal
+                },
+                geometricError: 0.0,
+                refine: 'ADD',
+                content: {
+                    uri: pointCloudTileName
+                }
+            }
+        };
+
+        await saveJson(tilesetPath, tilesetJson, prettyJson, gzip);
+    }
 }
