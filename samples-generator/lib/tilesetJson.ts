@@ -8,6 +8,20 @@ type BoundingVolume = AtLeastOne<{
     sphere: number[];
 }>;
 
+export interface TilesetJsonRootChildren {
+    children?: TilesetJsonRootChildren[];
+    boundingVolume: BoundingVolume;
+    geometricError: number;
+    transform?: number[];
+    content: {
+        uri: string;
+    };
+    extras?: {
+        id: string;
+    };
+    viewerRequestVolume?: BoundingVolume;
+}
+
 export interface TilesetJson {
     asset: {
         version: string;
@@ -27,18 +41,7 @@ export interface TilesetJson {
                 region: number[];
             };
         };
-        children?: {
-            boundingVolume: BoundingVolume;
-            geometricError: number;
-            transform?: number[];
-            content: {
-                uri: string;
-            };
-            extras?: {
-                id: string;
-            };
-            viewerRequestVolume?: BoundingVolume;
-        }[];
+        children?: TilesetJsonRootChildren[];
         geometricError: number;
         versionNumber?: string;
         region?: number[];
